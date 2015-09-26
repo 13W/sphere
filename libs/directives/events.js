@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 function addEventDirective(name, callback) {
     sphere.directive('s-' + name, function () {
@@ -19,6 +19,6 @@ function addEventDirective(name, callback) {
     });
 }
 
-['submit', 'click', 'keypress', 'keyup'].forEach(function (action) {
+['submit', 'click', 'keypress', 'keyup', 'change'].forEach(function (action) {
     addEventDirective(action);
 });

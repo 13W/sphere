@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 function Sphere() {
     if (!(this instanceof Sphere)) {

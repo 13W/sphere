@@ -45,9 +45,14 @@
   },
   "extends": "eslint:recommended",
   "globals": {
-    "E": true,
-    "Scroll": true,
-    "Audio": true,
-    "chrome": true
+    "sphere": true,
+    "Scope": true,
+    "Parser": true,
+    "hex": true,
+    "isServiceName": true,
+    "fire": true,
+    "writeToInput": true,
+    "readFromInput": true,
+    "DOMCompiler": true
   }
 }

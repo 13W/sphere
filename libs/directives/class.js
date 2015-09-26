@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 sphere.directive('s-class', function () {
     return {
@@ -7,15 +7,15 @@ sphere.directive('s-class', function () {
                 baseClasses = element.className;
             function updateClasses() {
                 var classes = $scope.$eval(sClass),
-                    result = baseClasses;
+                    result = baseClasses.split(' ');
 
                 Object.getOwnPropertyNames(classes || {}).forEach(function (name) {
                     if (classes[name]) {
-                        result += name;
+                        result.push(name);
                     }
                 });
 
-                element.className = result;
+                element.className = result.join(' ');
             }
 
             $scope.$watch('$update', updateClasses);

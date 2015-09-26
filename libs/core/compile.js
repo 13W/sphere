@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 function DOMCompiler(element, $scope) {
     var appElement = element || document.querySelector('[s-app]'),

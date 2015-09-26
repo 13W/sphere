@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 sphere.directive('#text', function () {
     return {

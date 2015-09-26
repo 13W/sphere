@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 function Parser(key) {
     if (!(this instanceof Parser)) {
