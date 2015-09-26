@@ -1,0 +1,9 @@
+{
+  "name": "sphere",
+  "description": "Spherical Horse In Vacuum",
+  "version": "0.0.1",
+  "devDependencies": {
+    "gulp": "^3.8.11",
+    "gulp-uglify": "^1.2.0"
+  }
+}

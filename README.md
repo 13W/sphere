@@ -1,2 +1,2 @@
-# sphere
+# Spherical Horse In Vacuum
 sphere
