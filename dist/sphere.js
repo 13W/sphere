@@ -1,4 +1,5 @@
 'use strict';
+
 function hex(int) {
     int = int.toString(16);
     return int.length % 2 ? int : '0' + int;
@@ -73,7 +74,7 @@ function readFromInput(element) {
     return result;
 }
 
-'use strict'
+'use strict';
 
 function Sphere() {
     if (!(this instanceof Sphere)) {
@@ -219,7 +220,7 @@ Scope.prototype.$eval = function (exp) {
     return new Function('scope', 'try {with(scope) {return ' + exp + ';}} catch (e) {}')(this);
 };
 
-'use strict'
+'use strict';
 
 function Parser(key) {
     if (!(this instanceof Parser)) {
@@ -266,7 +267,7 @@ window.angular = {
     }
 };
 
-'use strict'
+'use strict';
 
 function DOMCompiler(element, $scope) {
     var appElement = element || document.querySelector('[s-app]'),
@@ -371,7 +372,7 @@ sphere.directive('s-class', function () {
     };
 });
 
-'use strict'
+'use strict';
 
 function addEventDirective(name, callback) {
     sphere.directive('s-' + name, function () {
@@ -428,7 +429,7 @@ sphere.directive('s-model', function () {
     };
 });
 
-'use strict'
+'use strict';
 
 sphere.directive('s-repeat', function () {
     return {
@@ -495,7 +496,7 @@ sphere.directive('s-repeat', function () {
     };
 });
 
-'use strict'
+'use strict';
 
 sphere.directive('#text', function () {
     return {

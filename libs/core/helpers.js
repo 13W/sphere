@@ -1,4 +1,7 @@
 'use strict';
+
+/*eslint no-unused-vars: 0*/
+
 function hex(int) {
     int = int.toString(16);
     return int.length % 2 ? int : '0' + int;

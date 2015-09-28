@@ -29,4 +29,5 @@ Sphere.prototype.get = function (name) {
     return this.collections[name];
 };
 
+/*eslint no-unused-vars: 0*/
 var sphere = Sphere();

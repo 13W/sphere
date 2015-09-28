@@ -12,6 +12,6 @@ gulp.task('build', function () {
         'libs/core/*.js',
         'libs/**/*.js'
     ]).pipe(concat('sphere.js'))
-    //.pipe(uglify({compress: true, mangle: true}))
+    .pipe(uglify({compress: true, mangle: true}))
     .pipe(gulp.dest('./dist/'));
 });
