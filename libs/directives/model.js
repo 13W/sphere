@@ -14,7 +14,7 @@ sphere.directive('s-model', function () {
             function eventListener(event) {
                 event.preventDefault();
                 var value = readFromInput(element);
-                console.log('input change event', currentValue.getter($scope) + '=>' + value);
+                // console.log('input change event', currentValue.getter($scope) + '=>' + value);
                 if (value !== currentValue.getter($scope)) {
                     currentValue.setter($scope, value);
                 }

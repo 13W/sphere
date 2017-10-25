@@ -13,7 +13,7 @@ function isServiceName(name) {
 }
 
 function fire($events, name) {
-    console.warn('Fire: ', name);
+    // console.warn('Fire: ', name);
     var args = [].slice.call(arguments, 2),
         events = $events[name],
         updateEvents = $events.$update || [];

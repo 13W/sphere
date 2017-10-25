@@ -1,15 +1,15 @@
 'use strict';
 
 function DOMCompiler(element, $scope) {
-    var appElement = element || document.querySelector('[s-app]'),
+    const appElement = element || document.querySelector('[s-app]'),
         subTask = element !== document.querySelector('[s-app]') && !!$scope;
 
     if (!appElement) {
         throw new Error('Application is not declared.');
     }
 
-    var currentNode,
-        ni = document.createNodeIterator(
+    let currentNode;
+    const ni = document.createNodeIterator(
             appElement,
             NodeFilter.SHOW_ALL,
             function () {
@@ -18,48 +18,56 @@ function DOMCompiler(element, $scope) {
             false
         );
 
-    $scope = $scope || Scope();
-    sphere.service('$rootScope', $scope.$root);
+    $scope = $scope || sphere.get('$rootScope').$new();
 
     while (ni.nextNode()) {
         currentNode = ni.referenceNode;
-        currentNode.scope = currentNode.parentNode && currentNode.parentNode.scope || $scope;
+        if (!currentNode.dataset) {
+            currentNode.dataset = {};
+        }
+
+        currentNode.dataset.scope = currentNode.parentNode && currentNode.parentNode.dataset && currentNode.parentNode.dataset.scope || $scope.$id;
 
         [].slice.call(currentNode.attributes || []).forEach(function (attribute) {
             if (attribute.name.substr(0, 2) !== 's-') {
                 return;
             }
+
             if (attribute.name.toLowerCase() === 's-controller') {
-                var controller = sphere.get(attribute.value);
+                const controller = sphere.get(attribute.value);
                 if (!controller) {
                     throw new Error('Controller "' + attribute.value + '" not found');
                 }
-                currentNode.scope = currentNode.scope.$new();
-                controller(currentNode.scope);
+
+                const scope = $scope.$get(currentNode.dataset.scope).$new();
+                currentNode.dataset.scope = scope.$id;
+                controller(scope);
             } else {
-                var directive = sphere.get(attribute.name);
+                const directive = sphere.get(attribute.name);
                 if (directive) {
                     if (directive.scope) {
-                        currentNode.scope = currentNode.scope.$new();
+                        const scope = $scope.$get(currentNode.dataset.scope).$new();
+                        currentNode.dataset.scope = scope.$id;
                     }
 
-                    directive.link(currentNode.scope, currentNode);
+                    directive.link($scope.$get(currentNode.dataset.scope), currentNode);
                 }
             }
         });
 
-        var elementDirective = sphere.get(currentNode.nodeName.toLowerCase());
+        const elementDirective = sphere.get(currentNode.nodeName.toLowerCase());
         if (elementDirective) {
-            if (elementDirective.scope) {
-                currentNode.scope = currentNode.scope.$new();
+            if (elementDirective.dataset && elementDirective.dataset.scope) {
+                const scope = $scope.$get(currentNode.dataset.scope).$new();
+                currentNode.dataset.scope = scope.$id;
             }
-            elementDirective.link(currentNode.scope, currentNode);
+            elementDirective.link($scope.$get(currentNode.dataset.scope), currentNode);
         }
     }
+
     if (!subTask) {
         $scope.$root.$$loaded = true;
     }
 }
 
 sphere.service('$compile', DOMCompiler);
-sphere.service('$parser', Parser);

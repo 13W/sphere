@@ -16,9 +16,9 @@
 </form>
 <ul>
     <li s-repeat="(task, id) in tasks" s-class="{complete: task.checked}">
-        {{id}}. <input type="checkbox" s-model="task.checked" s-change="check(task)"/>
+            {{id}}. <input type="checkbox" s-model="task.checked" s-change="check(task)"/>
         {{task.entry}}
-        <a s-click="removeItem(task)">X</a>
+        <a s-click="removeItem(task)" style="cursor: pointer;color: crimson;">X</a>
     </li>
 </ul>
 Tasks: {{tasks.length}}, Complete: {{completeTasks}}
