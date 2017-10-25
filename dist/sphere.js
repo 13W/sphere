@@ -100,6 +100,24 @@ class Sphere {
     get(name) {
         return this.collections[name];
     }
+
+    forEach(object, callback) {
+        if (typeof object !== 'object' || !object) {
+            return;
+        }
+
+        let index = 0;
+        for (const o in object) {
+            const res = callback(object[o], o, index++);
+            if (res === false) {
+                return;
+            }
+        }
+    }
+
+    get$scope(id) {
+        return this.get('$rootScope').$get(id);
+    }
 }
 
 /*eslint no-unused-vars: 0*/
@@ -111,6 +129,8 @@ window.sphere = new Sphere();
     const startPool = [];
     const scopes = {};
     let count = 0;
+    let $$digest = 0;
+    let $$digestPool = {};
 
     const once = (func) => {
         let called = false;
@@ -131,6 +151,7 @@ window.sphere = new Sphere();
 
             this.$destroyed = false;
             this.$$target = null;
+            this.$$digest = false;
             this.$id = hex(count++);
             scopes[this.$id] = this;
 
@@ -165,7 +186,7 @@ window.sphere = new Sphere();
         }
 
         $destroy() {
-            // console.warn('$destroy', this);
+            console.warn('$destroy', this.$id);
             this.$destroyed = true;
             delete scopes[this.$id];
             this.$emit('$destroy');
@@ -182,22 +203,23 @@ window.sphere = new Sphere();
             this.$$watchers.forEach((revoke) => revoke());
         }
 
-        $emit(message, ...args) {
-            if (!this.$root.$$loaded) {
-                startPool.push(new CustomEvent(message, {detail: args}));
+        $emit(task, ...args) {
+            if (this.$$digest) {
+                if (!$$digestPool[this.$$digest]) {
+                    $$digestPool[this.$$digest] = {};
+                }
+                $$digestPool[this.$$digest][task] = new CustomEvent(task, {detail: args});
                 return;
-            } else if (startPool.length) {
-                do {
-                    this.$$events.EventEmitter.dispatchEvent(startPool.shift());
-                } while (startPool.length > 0);
             }
 
-            // console.log('fire event!', message, ...args);
-            if (this.$destroyed) {
+            if (this.$destroyed && task !== '$destroy') {
                 return false;
             }
 
-            this.$$events.EventEmitter.dispatchEvent(new CustomEvent(message, {detail: args}));
+            console.groupCollapsed(`$scope.${this.$id} -> $emit('${task}')`);
+            args.forEach((arg) => console.log(arg));
+            console.groupEnd();
+            this.$$events.EventEmitter.dispatchEvent(new CustomEvent(task, {detail: args}));
         }
 
         $on(eventName, callback) {
@@ -238,9 +260,13 @@ window.sphere = new Sphere();
             return new Function('scope', `try {with(scope) {return ${exp};}} catch(e) {console.error(e);}`)(this);
         }
 
-        $observe(object, path = '') {
+        $observe(object, path = '', digest = false) {
             if (typeof object !== 'object' || !object || object.$$target) {
                 return object;
+            }
+
+            if (!digest) {
+                this.$$digest = $$digest++;
             }
 
             const getPath = (currentPath = '') => []
@@ -312,7 +338,7 @@ window.sphere = new Sphere();
                                 enumerable: true,
                                 writable: true,
                                 configurable: true,
-                                value: self.$observe(value, getPath(key))
+                                value: self.$observe(value, getPath(key), self.$$digest)
                             });
                             fireEvent(key, value, oldValue, target, oldLength);
                         }
@@ -342,7 +368,7 @@ window.sphere = new Sphere();
 
             if (Array.isArray(object)) {
                 object.forEach((value, index) => {
-                    this.$observe(value, getPath(index));
+                    this.$observe(value, getPath(index), this.$$digest);
                     object[index] = proxify(value);
                 });
             } else {
@@ -351,12 +377,26 @@ window.sphere = new Sphere();
                         return;
                     }
 
-                    this.$observe(object[key], getPath(key));
+                    this.$observe(object[key], getPath(key), this.$$digest);
                     object[key] = proxify(object[key]);
                 });
             }
 
-            return proxify(object);
+            return (() => {
+                object = proxify(object);
+                let events = [];
+                do {
+                    if (!$$digestPool[this.$$digest]) {
+                        break;
+                    }
+                    events = Object.values($$digestPool[this.$$digest]);
+                    const event = events.shift();
+                    this.$$events.EventEmitter.dispatchEvent(event);
+                    delete $$digestPool[this.$$digest][event.type];
+                } while (events.length);
+                this.$$digest = false;
+                return object;
+            })();
         }
     }
 
@@ -465,7 +505,7 @@ window.angular = {
     element: function (element) {
         return {
             scope: function () {
-                return element.dataset ? sphere.get('$rootScope').$get(element.dataset.scope) : null;
+                return element.dataset ? sphere.get('$rootScope').$get(element.dataset.scope).this : null;
             }
         };
     }
@@ -666,17 +706,16 @@ sphere.directive('s-repeat', () => ({
             return;
         }
 
+        const scopeMap = new Map();
+        const itemsMap = new Map();
+
         function repeat() {
             if ($repeatScope) {
-                const children = parentElement.querySelectorAll('.s-repeat-element');
-                [].slice.apply(children).forEach(function (child) {
-                    $scope.$get(child.dataset.scope).$destroy();
-                    parentElement.removeChild(child);
-                });
-
-                if (!$repeatScope.$destroyed) {
-                    $repeatScope.$destroy();
-                    $repeatScope = null;
+                for (let [scope, element] of scopeMap.entries()) {
+                    if (scope.$destroyed) {
+                        parentElement.removeChild(element);
+                        scopeMap.delete(scope);
+                    }
                 }
             }
 
@@ -684,29 +723,50 @@ sphere.directive('s-repeat', () => ({
                 length = Object.keys(collection).length,
                 lastElement = comment;
 
-            $repeatScope = $scope.$new();
-
-            Object.keys(collection).forEach(function (key, index) {
-                var last = index === (length - 1),
-                    scope = $repeatScope.$new(),
-                    dom = original.cloneNode(true);
-
-                dom.dataset.scope = scope.$id;
-                dom.classList.add('s-repeat-element');
-
-                scope[entryKey] = collection[key];
-                scope.$index = index;
-                scope.$last = last;
-
-                if (entryIndex) {
-                    scope[entryIndex] = key;
+            const aliveScopes = {};
+            sphere.forEach(collection, (item, key, index) => {
+                let itemScope = itemsMap.get(item);
+                if (itemScope && itemScope.$destroyed) {
+                    itemsMap.delete(item);
+                    itemScope = null;
                 }
 
-                DOMCompiler(dom, scope);
-                parentElement.insertBefore(dom, lastElement.nextSibling);
-                lastElement = dom;
+                if (!itemScope) {
+                    itemScope = $repeatScope.$new();
+                    itemScope[entryKey] = item;
+                    itemsMap.set(item, itemScope);
+                    itemScope.$once('$destroy', () => itemsMap.delete(item));
+                }
+
+                if (entryIndex) {
+                    itemScope[entryIndex] = key;
+                }
+                itemScope.$index = index;
+                itemScope.$last = index === (length - 1);
+
+                if (!scopeMap.has(itemScope)) {
+                    const dom = original.cloneNode(true);
+                    scopeMap.set(itemScope, dom);
+                    dom.dataset.scope = itemScope.$id;
+                    dom.classList.add('s-repeat-element');
+                    DOMCompiler(dom, itemScope);
+                    parentElement.insertBefore(dom, lastElement.nextSibling);
+                }
+
+                aliveScopes[itemScope.$id] = true;
+                lastElement = scopeMap.get(itemScope);
             });
 
+            scopeMap.forEach((dom, scope) => {
+                const $id = scope.$id;
+                if (!aliveScopes[$id]) {
+                    dom.remove();
+                    scope.$destroy();
+                    scopeMap.delete(scope);
+                }
+
+                delete aliveScopes[$id];
+            });
         }
 
         $scope.$watch(collectionKey, repeat);

@@ -23,17 +23,16 @@ sphere.directive('s-repeat', () => ({
             return;
         }
 
+        const scopeMap = new Map();
+        const itemsMap = new Map();
+
         function repeat() {
             if ($repeatScope) {
-                const children = parentElement.querySelectorAll('.s-repeat-element');
-                [].slice.apply(children).forEach(function (child) {
-                    $scope.$get(child.dataset.scope).$destroy();
-                    parentElement.removeChild(child);
-                });
-
-                if (!$repeatScope.$destroyed) {
-                    $repeatScope.$destroy();
-                    $repeatScope = null;
+                for (let [scope, element] of scopeMap.entries()) {
+                    if (scope.$destroyed) {
+                        parentElement.removeChild(element);
+                        scopeMap.delete(scope);
+                    }
                 }
             }
 
@@ -41,29 +40,50 @@ sphere.directive('s-repeat', () => ({
                 length = Object.keys(collection).length,
                 lastElement = comment;
 
-            $repeatScope = $scope.$new();
-
-            Object.keys(collection).forEach(function (key, index) {
-                var last = index === (length - 1),
-                    scope = $repeatScope.$new(),
-                    dom = original.cloneNode(true);
-
-                dom.dataset.scope = scope.$id;
-                dom.classList.add('s-repeat-element');
-
-                scope[entryKey] = collection[key];
-                scope.$index = index;
-                scope.$last = last;
-
-                if (entryIndex) {
-                    scope[entryIndex] = key;
+            const aliveScopes = {};
+            sphere.forEach(collection, (item, key, index) => {
+                let itemScope = itemsMap.get(item);
+                if (itemScope && itemScope.$destroyed) {
+                    itemsMap.delete(item);
+                    itemScope = null;
                 }
 
-                DOMCompiler(dom, scope);
-                parentElement.insertBefore(dom, lastElement.nextSibling);
-                lastElement = dom;
+                if (!itemScope) {
+                    itemScope = $repeatScope.$new();
+                    itemScope[entryKey] = item;
+                    itemsMap.set(item, itemScope);
+                    itemScope.$once('$destroy', () => itemsMap.delete(item));
+                }
+
+                if (entryIndex) {
+                    itemScope[entryIndex] = key;
+                }
+                itemScope.$index = index;
+                itemScope.$last = index === (length - 1);
+
+                if (!scopeMap.has(itemScope)) {
+                    const dom = original.cloneNode(true);
+                    scopeMap.set(itemScope, dom);
+                    dom.dataset.scope = itemScope.$id;
+                    dom.classList.add('s-repeat-element');
+                    DOMCompiler(dom, itemScope);
+                    parentElement.insertBefore(dom, lastElement.nextSibling);
+                }
+
+                aliveScopes[itemScope.$id] = true;
+                lastElement = scopeMap.get(itemScope);
             });
 
+            scopeMap.forEach((dom, scope) => {
+                const $id = scope.$id;
+                if (!aliveScopes[$id]) {
+                    dom.remove();
+                    scope.$destroy();
+                    scopeMap.delete(scope);
+                }
+
+                delete aliveScopes[$id];
+            });
         }
 
         $scope.$watch(collectionKey, repeat);

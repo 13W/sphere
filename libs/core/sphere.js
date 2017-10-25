@@ -22,6 +22,24 @@ class Sphere {
     get(name) {
         return this.collections[name];
     }
+
+    forEach(object, callback) {
+        if (typeof object !== 'object' || !object) {
+            return;
+        }
+
+        let index = 0;
+        for (const o in object) {
+            const res = callback(object[o], o, index++);
+            if (res === false) {
+                return;
+            }
+        }
+    }
+
+    get$scope(id) {
+        return this.get('$rootScope').$get(id);
+    }
 }
 
 /*eslint no-unused-vars: 0*/

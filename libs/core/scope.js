@@ -4,6 +4,8 @@
     const startPool = [];
     const scopes = {};
     let count = 0;
+    let $$digest = 0;
+    let $$digestPool = {};
 
     const once = (func) => {
         let called = false;
@@ -24,6 +26,7 @@
 
             this.$destroyed = false;
             this.$$target = null;
+            this.$$digest = false;
             this.$id = hex(count++);
             scopes[this.$id] = this;
 
@@ -58,7 +61,7 @@
         }
 
         $destroy() {
-            // console.warn('$destroy', this);
+            // console.warn('$destroy', this.$id);
             this.$destroyed = true;
             delete scopes[this.$id];
             this.$emit('$destroy');
@@ -75,22 +78,23 @@
             this.$$watchers.forEach((revoke) => revoke());
         }
 
-        $emit(message, ...args) {
-            if (!this.$root.$$loaded) {
-                startPool.push(new CustomEvent(message, {detail: args}));
+        $emit(task, ...args) {
+            if (this.$$digest) {
+                if (!$$digestPool[this.$$digest]) {
+                    $$digestPool[this.$$digest] = {};
+                }
+                $$digestPool[this.$$digest][task] = new CustomEvent(task, {detail: args});
                 return;
-            } else if (startPool.length) {
-                do {
-                    this.$$events.EventEmitter.dispatchEvent(startPool.shift());
-                } while (startPool.length > 0);
             }
 
-            // console.log('fire event!', message, ...args);
-            if (this.$destroyed) {
+            if (this.$destroyed && task !== '$destroy') {
                 return false;
             }
 
-            this.$$events.EventEmitter.dispatchEvent(new CustomEvent(message, {detail: args}));
+            console.groupCollapsed(`$scope.${this.$id} -> $emit('${task}')`);
+            args.forEach((arg) => console.log(arg));
+            console.groupEnd();
+            this.$$events.EventEmitter.dispatchEvent(new CustomEvent(task, {detail: args}));
         }
 
         $on(eventName, callback) {
@@ -131,9 +135,13 @@
             return new Function('scope', `try {with(scope) {return ${exp};}} catch(e) {console.error(e);}`)(this);
         }
 
-        $observe(object, path = '') {
+        $observe(object, path = '', digest = false) {
             if (typeof object !== 'object' || !object || object.$$target) {
                 return object;
+            }
+
+            if (!digest) {
+                this.$$digest = $$digest++;
             }
 
             const getPath = (currentPath = '') => []
@@ -205,7 +213,7 @@
                                 enumerable: true,
                                 writable: true,
                                 configurable: true,
-                                value: self.$observe(value, getPath(key))
+                                value: self.$observe(value, getPath(key), self.$$digest)
                             });
                             fireEvent(key, value, oldValue, target, oldLength);
                         }
@@ -235,7 +243,7 @@
 
             if (Array.isArray(object)) {
                 object.forEach((value, index) => {
-                    this.$observe(value, getPath(index));
+                    this.$observe(value, getPath(index), this.$$digest);
                     object[index] = proxify(value);
                 });
             } else {
@@ -244,12 +252,26 @@
                         return;
                     }
 
-                    this.$observe(object[key], getPath(key));
+                    this.$observe(object[key], getPath(key), this.$$digest);
                     object[key] = proxify(object[key]);
                 });
             }
 
-            return proxify(object);
+            return (() => {
+                object = proxify(object);
+                let events = [];
+                do {
+                    if (!$$digestPool[this.$$digest]) {
+                        break;
+                    }
+                    events = Object.values($$digestPool[this.$$digest]);
+                    const event = events.shift();
+                    this.$$events.EventEmitter.dispatchEvent(event);
+                    delete $$digestPool[this.$$digest][event.type];
+                } while (events.length);
+                this.$$digest = false;
+                return object;
+            })();
         }
     }
 
