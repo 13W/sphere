@@ -1,279 +1,341 @@
 'use strict';
 
 (() => {
-    const startPool = [];
-    const scopes = {};
-    let count = 0;
-    let $$digest = 0;
-    let $$digestPool = {};
+    const scopes = new Map();
+    const scope = (target = {}) => {
+        const EMITTER = Symbol('Emitter'),
+            COLLECT = Symbol('Collect'),
+            TARGET = Symbol('Target'),
+            REVOKE = Symbol('Revoke'),
+            PROXY = Symbol('Proxy');
 
-    const once = (func) => {
-        let called = false;
-        return (...args) => {
-            if (called) {
-                return;
-            }
+        let counter = 0;
+        let eventsHolderId = 0;
 
-            called = true;
-            return func(...args);
-        }
-    };
-    class Scope {
-        constructor(id) {
-            if (scopes[id]) {
-                return scopes[id];
-            }
+        const baseArrayFuncs = new Map();
+        const baseObjectFuncs = new Map();
 
-            this.$destroyed = false;
-            this.$$target = null;
-            this.$$digest = false;
-            this.$id = hex(count++);
-            scopes[this.$id] = this;
+        const mapProtoFuncs = (object, map) => {
+            Object.getOwnPropertyNames(Object.getPrototypeOf(object))
+                .forEach((key) => map.set(object[key], true));
+        };
 
-            this.$$events = Object.defineProperty([], 'EventEmitter', {
-                enumerable: false,
-                configurable: false,
-                writable: false,
-                value: document.createElement('a')
-            });
+        mapProtoFuncs({}, baseObjectFuncs);
+        mapProtoFuncs([], baseArrayFuncs);
 
-            this.$$watchers = [];
-            this.$$children = [];
-            this.$$observers = [];
-            this.$parent = null;
-            this.$root = this.this = this.$observe(this);
-        }
+        const getEventHolderId = () => eventsHolderId++;
+        const getNextId = () => ('0'.repeat(5) + (counter++).toString(16)).substr(-5);
 
-        $get($id) {
-            return scopes[$id];
-        }
+        const isFunction = (value) => typeof value === 'function';
+        const isSymbol = (value) => typeof value === 'symbol';
+        const isString = (value) => typeof value === 'string';
+        const isObject = (value) => String(value) === '[object Object]';
+        const isArray = (value) => Array.isArray(value);
 
-        $new(isolate) {
-            const $scope = new Scope();
-            if (!isolate) {
-                $scope.$parent = this.this;
-                Object.setPrototypeOf($scope, this);
-            }
-            $scope.$root = this.$root;
-            this.$$children.push($scope.this);
+        const getKey = (...path) => []
+            .concat(...path)
+            .filter(Boolean)
+            .filter((key) => !isSymbol(key))
+            .join('.');
 
-            return $scope.this;
-        }
-
-        $destroy() {
-            // console.warn('$destroy', this.$id);
-            this.$destroyed = true;
-            delete scopes[this.$id];
-            this.$emit('$destroy');
-            const $parent = this.$parent;
-            if (!parent) {
-                return false;
-            }
-
-            const index = $parent.$$children.indexOf(this.this);
-            $parent.$$children.splice(index, 1);
-            this.$$children.forEach(($child) => $child.$destroy());
-            this.$$events.forEach((_, index) => this.$off(0));
-
-            this.$$watchers.forEach((revoke) => revoke());
-        }
-
-        $emit(task, ...args) {
-            if (this.$$digest) {
-                if (!$$digestPool[this.$$digest]) {
-                    $$digestPool[this.$$digest] = {};
+        const EventEmitter = (ee) => ({
+            $emit(name, ...args) {
+                if (!ee.events) {
+                    ee.events = {};
                 }
-                $$digestPool[this.$$digest][task] = new CustomEvent(task, {detail: args});
-                return;
-            }
 
-            if (this.$destroyed && task !== '$destroy') {
-                return false;
-            }
-
-            console.groupCollapsed(`$scope.${this.$id} -> $emit('${task}')`);
-            args.forEach((arg) => console.log(arg));
-            console.groupEnd();
-            this.$$events.EventEmitter.dispatchEvent(new CustomEvent(task, {detail: args}));
-        }
-
-        $on(eventName, callback) {
-            // console.log('subscribe!', eventName);
-            let listener = ({detail: args}) => callback(...args);
-            listener.eventName = eventName;
-            this.$$events.EventEmitter.addEventListener(eventName, listener);
-            const index = this.$$events.push(listener);
-            return once(() => this.$off(index));
-        }
-
-        $once(message, callback) {
-            // console.log('subscribe once!', message);
-            const $off = this.$on(message, (...args) => {
-                $off();
-                callback(...args);
-            });
-        }
-
-        $off(index = -1) {
-            // console.log('unsubscribe!', index);
-            if (index !== -1) {
-                const listener = this.$$events[index];
-                this.$$events.EventEmitter.removeEventListener(listener.eventName, listener);
-                this.$$events.splice(index, 1);
-            }
-        }
-
-        $watch(path, callback) {
-            return this.$on(path, callback);
-        }
-
-        $eval(exp) {
-            if (typeof exp === 'function') {
-                return exp.call(this);
-            }
-
-            return new Function('scope', `try {with(scope) {return ${exp};}} catch(e) {console.error(e);}`)(this);
-        }
-
-        $observe(object, path = '', digest = false) {
-            if (typeof object !== 'object' || !object || object.$$target) {
-                return object;
-            }
-
-            if (!digest) {
-                this.$$digest = $$digest++;
-            }
-
-            const getPath = (currentPath = '') => []
-                .concat(path, currentPath)
-                .filter((v) => typeof v === 'string' && v.length > 0)
-                .join('.');
-
-            const fireEvent = (path, newValue, oldValue, target, oldLength) => {
-                if (Array.isArray(target)) {
-                    self.$emit(getPath(), newValue, oldValue, target);
-                    self.$emit(getPath('length'), target.length, oldLength, target);
+                if (!ee.nextHolder) {
+                    ee.nextHolder = getEventHolderId();
+                    const holder = ee.events[ee.nextHolder] = ee.events[ee.nextHolder] || new Map();
+                    holder.set(name, args);
+                    setTimeout(() => {
+                        delete ee.events[ee.nextHolder];
+                        ee.nextHolder = null;
+                        holder.forEach((args, eventName) => ee.dispatchEvent(
+                            new CustomEvent(eventName, {detail: args})
+                        ));
+                        holder.clear();
+                    });
                 } else {
-                    self.$emit(path, newValue, oldValue, target);
+                    ee.events[ee.nextHolder].set(name, args);
+                }
+            }
+        });
+
+        const Observer = (target = {}, parentKey = '', self) => Proxy.revocable(target, Object.assign({...Reflect,
+            get(target, key) {
+                if (key === PROXY) {
+                    return true;
                 }
 
-                let fullPath = getPath(path);
-                if (fullPath !== path) {
-                    self.$emit(fullPath, newValue, oldValue, target);
-                }
-            };
-
-            const self = this;
-            const proxify = (object) => {
-                if (typeof object !== 'object' ||
-                    !object ||
-                    (object instanceof Date) ||
-                    (object instanceof RegExp) ||
-                    (object instanceof Window)) {
-
-                    return object;
+                if (key === TARGET) {
+                    return target;
                 }
 
-                const revocable = Proxy.revocable(object, {
-                    get(target, key) {
-                        if (key === '$$target') {
-                            return target;
-                        }
+                const value = target[key];
 
-                        return target[key];
-                    },
-                    set(target, key, value) {
-                        let oldLength;
-                        const oldValue = target[key];
+                if (COLLECT in self && isString(key) && key[0] !== '$') {
+                    EventEmitter(self[COLLECT]).$emit('get', key, value, target);
+                }
 
-                        if (Array.isArray(target)) {
-                            oldLength = target.length;
-                        }
-
-                        if (Array.isArray(target) && key === 'length') {
-                            return true;
-                        }
-
-                        Object.defineProperty(target, key, {
-                            enumerable: true,
-                            writable: true,
-                            configurable: true,
-                            value
-                        });
-                        if (typeof key === 'symbol') {
-                            return true;
-                        }
-
-                        if (!target[Symbol.unscopables]) {
-                            target[Symbol.unscopables] = {};
-                        }
-                        target[Symbol.unscopables][key] = false;
-                        if (!self.$destroyed && value !== oldValue) {
-                            Object.defineProperty(target, key, {
-                                enumerable: true,
-                                writable: true,
-                                configurable: true,
-                                value: self.$observe(value, getPath(key), self.$$digest)
-                            });
-                            fireEvent(key, value, oldValue, target, oldLength);
-                        }
-
-                        return true;
-                    },
-                    deleteProperty(target, key) {
-                        let oldLength;
-                        if (Array.isArray(target)) {
-                            oldLength = target.length;
-                            target.splice(key, 1);
-                        } else {
-                            delete target[key];
-                        }
-
-                        if (!self.$destroyed) {
-                            fireEvent(key, undefined, target[key], target, oldLength);
-                        }
-
-                        return true;
+                if ((isObject(value) || isFunction(value) || isArray(value)) && !value[PROXY]) {
+                    if (isFunction(target) && key === 'prototype') {
+                        return value;
                     }
+
+                    if (self.$observer.has(value)) {
+                        return self.$observer.get(value).proxy;
+                    }
+                    const observer = Observer(value, getKey(parentKey, key), self);
+                    self.$observer.set(value, observer);
+                    return observer.proxy;
+                }
+
+                return value;
+            },
+            set(target, key, value) {
+                const oldValue = target[key];
+                const isArrayLength = key === 'length' && isArray(target);
+                const oldLength =  isArrayLength ? target.length : 0;
+
+                target[key] = value;
+
+                if (!parentKey && Symbol.unscopables in self) {
+                    self[Symbol.unscopables][key] = false;
+                }
+
+                if (self.$observer.has(oldValue) && self.$destroyed) {
+                    self.$observer.get(oldValue).revoke();
+                }
+
+                if (isString(key) && key[0] !== '$') {
+                    if (EMITTER in self) {
+                        const $emitter = EventEmitter(self[EMITTER]);
+                        $emitter.$emit(getKey(parentKey, key), oldValue, value, target);
+
+                        if (isArrayLength) {
+                            $emitter.$emit(parentKey, oldLength, target.length, target);
+                        }
+                    }
+                }
+
+                return true;
+            },
+            has(target, key) {
+                if (key === TARGET) {
+                    return true;
+                }
+
+                if (isSymbol(key)) {
+                    return key in self[TARGET];
+                }
+
+                return true;
+            },
+            apply(func, scope, args) {
+                if ([].indexOf === func) {
+                    scope = scope.map((el) => TARGET in el ? el[TARGET] : el);
+                    args = args.map((el) => TARGET in el ? el[TARGET] : el);
+                }
+
+                return func.call(scope, ...args);
+            }
+        }));
+
+        const PereScope = () => ({
+            toString() {
+                return String(this[TARGET]);
+            },
+            valueOf() {
+                return this[TARGET];
+            },
+            toJSON() {
+                return this[TARGET];
+            }
+        });
+
+        const Scope = (target = {}) => ({
+            [TARGET]: target,
+            [REVOKE]: () => {},
+            [EMITTER]: document.createElement('a'),
+            [Symbol.unscopables]: {},
+
+            $id: getNextId(),
+            $destroyed: false,
+            $children: [],
+            $watchers: {},
+            $listener: new Map(),
+            $observer: new Map(),
+            $parent: null,
+            $root: null,
+            $events: {},
+            $get: ($id) => scopes.get($id),
+
+            $new(isolated) {
+                const scope = Scope();
+                // console.debug(`Creating new Scope ${this.$id} -> ${scope.$id}`, scope);
+                const perescope = PereScope();
+                const observer = Observer(scope[TARGET], undefined, scope);
+
+                scope[REVOKE] = observer.revoke;
+
+                if (!isolated) {
+                    scope.$parent = this;
+                    this.$children.push(scope);
+                    Object.setPrototypeOf(scope[TARGET], this[TARGET]);
+                }
+
+                scope.$root = this.$root;
+                if (!this.$root) {
+                    scope.$root = this.$root = this;
+                }
+
+                Object.setPrototypeOf(perescope, observer.proxy);
+                Object.setPrototypeOf(scope, perescope);
+
+                scopes.set(scope.$id, scope);
+                return scope;
+            },
+
+            $destroy() {
+                if (this.$destroyed) {
+                    return;
+                }
+
+                this.$emit('$destroy');
+                this.$children.forEach((child) => child.$destroy());
+
+                Object.keys(this.$watchers).forEach((expression) => {
+                    this.$watchers[expression].splice(0).forEach((unwatch) => unwatch());
+                    delete this.$watchers[expression];
                 });
 
-                self.$$watchers.push(revocable.revoke);
-                return revocable.proxy;
-            };
+                this.$listener.forEach((stopListening) => stopListening());
 
-            if (Array.isArray(object)) {
-                object.forEach((value, index) => {
-                    this.$observe(value, getPath(index), this.$$digest);
-                    object[index] = proxify(value);
+                if (this.$parent) {
+                    const index = this.$parent.$children.indexOf(this);
+                    if (index === -1) {
+                        return;
+                        // throw new Error('Something went wrong, $scope already detached!');
+                    }
+                    Object.setPrototypeOf(this[TARGET], null);
+                    this.$parent.$children.splice(index, 1);
+                    this.$parent = null;
+                }
+
+                this.$root = null;
+                this.$destroyed = true;
+                this[REVOKE]();
+                Object.setPrototypeOf(Object.getPrototypeOf(this), this[TARGET]);
+                Object.freeze(this);
+            },
+
+            $emit(eventName, ...args) {
+                EventEmitter(this[EMITTER]).$emit(eventName, ...args);
+            },
+
+            $on(eventName, lnr) {
+                const listener = ({detail: args} = {detail: []}) => {
+                    // console.log(`$scope.${this.$id}:$on:${eventName}`, ...args);
+                    lnr(...args);
+                };
+
+                this[EMITTER].addEventListener(eventName, listener);
+
+                let removed = false;
+                const stopListening = () => {
+                    if (removed) {
+                        return;
+                    }
+                    removed = true;
+
+                    this[EMITTER].removeEventListener(eventName, listener);
+                    this.$listener.delete(listener);
+                };
+
+                this.$listener.set(listener, stopListening);
+                return stopListening;
+            },
+
+            $once(eventName, lnr) {
+                const stopListening = this.$on(eventName, (...args) => {
+                    stopListening();
+                    lnr(...args);
                 });
-            } else {
-                Object.getOwnPropertyNames(object).forEach((key) => {
-                    if (key[0] === '$' || key === 'this') {
+            },
+
+            $eval(expression, scope) {
+                scope = scope || this;
+                if (isFunction(expression)) {
+                    return expression.call(scope);
+                }
+
+                return new Function('scope', `try{with(scope){return ${expression};}}catch(e){}`)(scope);
+            },
+
+            $watch(expression, listener) {
+                this.$watchers[expression] = [];
+                const keys = {};
+                const scope = {
+                    $id: this.$id,
+                    $destroyed: false,
+                    $observer: new Map(),
+                    [COLLECT]: document.createElement('a'),
+                    [TARGET]: this[TARGET],
+                    [Symbol.unscopables]: this[Symbol.unscopables]
+                };
+
+                let oldValue;
+                const keyWatcher = ({detail: [key]}) => {
+                    if (this.$destroyed) {
+                        scope.$destroy();
+                    }
+
+                    if (scope.$destroyed) {
                         return;
                     }
 
-                    this.$observe(object[key], getPath(key), this.$$digest);
-                    object[key] = proxify(object[key]);
-                });
-            }
+                    if (!(key in keys)) {
+                        keys[key] = true;
+                        const listener = () => {
+                            let newValue = this.$eval(expression, scope);
+                            this.$emit(`$watch:${expression}`, newValue, oldValue, scope);
+                            oldValue = newValue;
+                        };
 
-            return (() => {
-                object = proxify(object);
-                let events = [];
-                do {
-                    if (!$$digestPool[this.$$digest]) {
-                        break;
+                        const stopListening = this.$on(key, listener);
+                        this.$watchers[expression].push(stopListening);
                     }
-                    events = Object.values($$digestPool[this.$$digest]);
-                    const event = events.shift();
-                    this.$$events.EventEmitter.dispatchEvent(event);
-                    delete $$digestPool[this.$$digest][event.type];
-                } while (events.length);
-                this.$$digest = false;
-                return object;
-            })();
-        }
-    }
+                };
 
-    sphere.service('$rootScope', new Scope().this);
+                const pereScope = PereScope();
+                const observer = Observer(scope[TARGET], undefined, scope);
+                scope[COLLECT].addEventListener('get', keyWatcher);
+                Object.setPrototypeOf(pereScope, observer.proxy);
+                Object.setPrototypeOf(scope, pereScope);
+                const newValue = this.$eval(expression, scope);
+                const stopListening = this.$on(`$watch:${expression}`, listener);
+                this.$emit(`$watch:${expression}`, newValue, undefined, this);
+
+                scope.$destroy = () => {
+                    scope.$destroyed = true;
+                    stopListening();
+                    scope[COLLECT].removeEventListener('get', keyWatcher);
+                    this.$watchers[expression].forEach((unwatch) => unwatch());
+                    this.$observer.forEach((observer) => observer.revoke());
+                    this.$observer.clear();
+
+                    observer.revoke();
+                    scope[COLLECT].remove();
+                    delete scope[COLLECT];
+                };
+
+                return scope.$destroy;
+            }
+        });
+
+        return Scope(target).$new();
+    };
+
+    sphere.service('$rootScope', scope().$root);
 })();

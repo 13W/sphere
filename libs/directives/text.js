@@ -1,27 +1,17 @@
 'use strict';
 
 sphere.directive('#text', () => ({
+    priority: 100,
     link($scope, element) {
         const originalValue = element.nodeValue,
-            paths = {};
-        let result;
+            re = /{{([^}]+)}}/g;
 
-        element.nodeValue = originalValue.replace(/\{\{([^\}]+)\}\}/g, function (o, path) {
-            result = $scope.$eval(path);
-            if (paths[path]) {
-                return result === undefined ? '' : result;
-            }
+        if (!originalValue.match(re)) {
+            return;
+        }
 
-            $scope.$watch(path, function (nv, ov) {
-                if (nv !== ov) {
-                    element.nodeValue = originalValue.replace(/\{\{([^\}]+)\}\}/g, function (o, path) {
-                        var result = $scope.$eval(path);
-                        return result === undefined ? '' : result;
-                    });
-                }
-            });
-
-            return result === undefined ? '' : result;
+        $scope.$watch(('`' + originalValue + '`').replace(re, '${$1}'), (newValue) => {
+            element.nodeValue = newValue;
         });
     }
 }));

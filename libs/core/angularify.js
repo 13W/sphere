@@ -4,7 +4,7 @@ window.angular = {
     element: function (element) {
         return {
             scope: function () {
-                return element.dataset ? sphere.get('$rootScope').$get(element.dataset.scope).this : null;
+                return sphere.get('$compile').findScope(element);
             }
         };
     }

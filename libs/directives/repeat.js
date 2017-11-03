@@ -1,11 +1,14 @@
 'use strict';
 
 sphere.directive('s-repeat', () => ({
+    priority: 100,
+    replace: true,
     link($scope, element) {
         if (element.className.indexOf('s-repeat-element') !== -1) {
             return;
         }
 
+        const $compile = sphere.get('$compile');
         const repeatStr = element.getAttribute('s-repeat'),
             parsed = /\s*(?:\(\s*(\w+)\s*,\s*(\w+)\s*\)|\s*(\w+)\s*)\s*in\s*(\w+)\s*/g.exec(repeatStr) || {},
             entryKey = parsed[1] || parsed[3],
@@ -26,7 +29,11 @@ sphere.directive('s-repeat', () => ({
         const scopeMap = new Map();
         const itemsMap = new Map();
 
-        function repeat() {
+        function repeat(collection) {
+            if (!collection) {
+                return;
+            }
+
             if ($repeatScope) {
                 for (let [scope, element] of scopeMap.entries()) {
                     if (scope.$destroyed) {
@@ -36,8 +43,7 @@ sphere.directive('s-repeat', () => ({
                 }
             }
 
-            let collection = $scope.$eval(collectionKey) || [],
-                length = Object.keys(collection).length,
+            let length = Object.keys(collection).length,
                 lastElement = comment;
 
             const aliveScopes = {};
@@ -63,10 +69,11 @@ sphere.directive('s-repeat', () => ({
 
                 if (!scopeMap.has(itemScope)) {
                     const dom = original.cloneNode(true);
+                    $compile.mapScope(dom, itemScope);
                     scopeMap.set(itemScope, dom);
                     dom.dataset.scope = itemScope.$id;
                     dom.classList.add('s-repeat-element');
-                    DOMCompiler(dom, itemScope);
+                    $compile(dom, itemScope);
                     parentElement.insertBefore(dom, lastElement.nextSibling);
                 }
 

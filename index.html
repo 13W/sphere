@@ -1,5 +1,6 @@
 <html s-app="TestApp">
 <head>
+    <meta charset="utf-8">
     <title>Spherical horse in vacuum</title>
     <style>
         .complete {
@@ -29,16 +30,28 @@ Tasks: {{tasks.length}}, Complete: {{completeTasks}}
             value: 'hello world',
             radio: 'radio2'
         };
-        $scope.tasks = [];
+        $scope.tasks = [
+            {entry: 'выпить хлеб', checked: true},
+            {entry: 'закусить'},
+            {entry: 'закоммитить'}
+        ];
+
         $scope.completeTasks = 0;
 
         $scope.addItem = function (item) {
+            if (!item) {
+                return;
+            }
+
             $scope.tasks.push({entry: item, checked: false});
             $scope.item = '';
         };
 
         $scope.removeItem = function (item) {
-            $scope.tasks.splice($scope.tasks.indexOf(item), 1);
+            const index = $scope.tasks.indexOf(item);
+            if (index !== -1) {
+                $scope.tasks.splice(index, 1);
+            }
         };
 
         $scope.check = function () {
@@ -49,8 +62,7 @@ Tasks: {{tasks.length}}, Complete: {{completeTasks}}
 
         $scope.$watch('tasks', $scope.check);
     });
-
-    DOMCompiler();
+    sphere.get('$compile')(document.body);
 </script>
 </body>
 </html>

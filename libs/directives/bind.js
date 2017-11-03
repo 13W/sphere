@@ -1,13 +1,12 @@
 'use strict';
 
-sphere.directive('s-bind', function () {
-    return {
-        link: function ($scope, element) {
-            var key = element.getAttribute('s-bind') || element.getAttribute('s-model');
+sphere.directive('s-bind', () => ({
+    priority: 60,
+    link($scope, element) {
+        const key = element.getAttribute('s-bind') || element.getAttribute('s-model');
 
-            $scope.$watch(key, function (value) {
-                writeToInput(element, value);
-            });
-        }
-    };
-});
+        $scope.$watch(key, function (value) {
+            writeToInput(element, value);
+        });
+    }
+}));

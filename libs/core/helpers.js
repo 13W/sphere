@@ -31,6 +31,10 @@ function fire($events, name) {
 
 function writeToInput(element, value) {
     var date;
+    if (value === undefined) {
+        value = '';
+    }
+
     if (element.nodeName === 'INPUT') {
         if (element.type === 'checkbox') {
             element.checked = !!value;
