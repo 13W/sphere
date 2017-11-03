@@ -475,9 +475,12 @@ window.sphere = new Sphere();
                     scope.$destroyed = true;
                     stopListening();
                     scope[COLLECT].removeEventListener('get', keyWatcher);
-                    this.$watchers[expression].forEach((unwatch) => unwatch());
-                    this.$observer.forEach((observer) => observer.revoke());
-                    this.$observer.clear();
+
+                    if (!this.$destroyed) {
+                        this.$watchers[expression].forEach((unwatch) => unwatch());
+                        this.$observer.forEach((observer) => observer.revoke());
+                        this.$observer.clear();
+                    }
 
                     observer.revoke();
                     scope[COLLECT].remove();

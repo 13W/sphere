@@ -11,7 +11,8 @@
 </head>
 <body s-controller="ToDoCtrl">
 <h3 class="h3">Todos</h3>
-
+<input type="button" s-click="add500items()" value="Add 500 tasks">
+<input type="button" s-click="remove500items()" value="Remove 500 tasks">
 <form s-submit="addItem(item)">
     <input type="text" s-model="item"/>
 </form>
@@ -58,6 +59,16 @@ Tasks: {{tasks.length}}, Complete: {{completeTasks}}
             $scope.completeTasks = $scope.tasks.filter(function (task) {
                 return task.checked;
             }).length;
+        };
+
+        $scope.add500items = () => {
+            for (let i = 0; i < 500; i++) {
+                $scope.tasks.push({entry: `item-${i}`, checked: i % 2 === 0});
+            }
+        };
+
+        $scope.remove500items = () => {
+            $scope.tasks.splice(Math.ceil(Math.random() * ($scope.tasks.length - 500)), 500);
         };
 
         $scope.$watch('tasks', $scope.check);
