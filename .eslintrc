@@ -2,13 +2,16 @@
   "rules": {
     "indent": [
       2,
-      4,
+      2,
       {"SwitchCase": 1}
     ],
     "brace-style": 2,
     "func-style": [
-      2,
-      "declaration"
+      "error",
+      "declaration",
+      {
+        "allowArrowFunctions": true
+      }
     ],
     "guard-for-in": 2,
     "no-floating-decimal": 2,
@@ -25,7 +28,7 @@
     ],
     "radix": 2,
     "wrap-iife": 2,
-    "space-after-keywords": 2,
+//    "space-after-keywords": 2,
     "valid-jsdoc": [
       2,
       {
@@ -38,11 +41,70 @@
       2,
       "always"
     ],
-    "no-unused-vars": 2
+    "no-unused-vars": 2,
+    "curly": [
+      2,
+      "all"
+    ],
+    "operator-linebreak": [
+      2,
+      "after"
+    ],
+    "camelcase": [
+      2,
+      {
+        "properties": "never"
+      }
+    ],
+    "max-len": [
+      2,
+      120
+    ],
+    "no-multi-str": 2,
+    "no-mixed-spaces-and-tabs": 2,
+    "no-trailing-spaces": 2,
+    "space-unary-ops": [
+      2,
+      {
+        "nonwords": false,
+        "overrides": {}
+      }
+    ],
+    "consistent-this": [
+      2,
+      "self"
+    ],
+    "keyword-spacing": [
+      2,
+      {}
+    ],
+    "space-infix-ops": 2,
+    "space-before-blocks": [
+      2,
+      "always"
+    ],
+    "eol-last": 2,
+    "array-bracket-spacing": [
+      0,
+      "never",
+      {
+        "singleValue": true
+      }
+    ],
+    "space-in-parens": [
+      2,
+      "never"
+    ],
+    "no-multiple-empty-lines": 2
+  },
+  "parserOptions": {
+    "ecmaVersion": 9,
+    "sourceType": "module"
   },
   "env": {
     "node": true,
-    "browser": true
+    "browser": true,
+    "es6": true
   },
   "extends": "eslint:recommended",
   "globals": {
